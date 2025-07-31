@@ -1,0 +1,36 @@
+=== xrp_bot.py ===
+
+import time import requests import numpy as np import talib from binance.client import Client from binance.enums import * import telegram
+
+=== Konfigurasi API ===
+
+API_KEY = "YOUR_BINANCE_API_KEY" API_SECRET = "YOUR_BINANCE_SECRET" TELEGRAM_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN" TELEGRAM_CHAT_ID = "YOUR_TELEGRAM_CHAT_ID"
+
+client = Client(API_KEY, API_SECRET) bot = telegram.Bot(token=TELEGRAM_TOKEN)
+
+symbol = "XRPUSDT" timeframe = Client.KLINE_INTERVAL_1H qty = 50  # Jumlah XRP
+
+def get_klines(): candles = client.get_klines(symbol=symbol, interval=timeframe, limit=100) close = np.array([float(x[4]) for x in candles]) high = np.array([float(x[2]) for x in candles]) low = np.array([float(x[3]) for x in candles]) return close, high, low
+
+def get_signals(): close, high, low = get_klines() ma = talib.SMA(close, timeperiod=14) rsi = talib.RSI(close, timeperiod=14) macd, macdsignal, _ = talib.MACD(close)
+
+retracement = [0.236, 0.382, 0.5, 0.618, 0.786]
+high_price = np.max(high)
+low_price = np.min(low)
+diff = high_price - low_price
+fib_levels = [high_price - r * diff for r in retracement]
+
+signal = ""
+if rsi[-1] < 30 and macd[-1] > macdsignal[-1] and close[-1] > ma[-1]:
+    signal = "BUY"
+elif rsi[-1] > 70 and macd[-1] < macdsignal[-1] and close[-1] < ma[-1]:
+    signal = "SELL"
+
+return signal, fib_levels
+
+def place_order(signal): if signal == "BUY": order = client.order_market_buy(symbol=symbol, quantity=qty) elif signal == "SELL": order = client.order_market_sell(symbol=symbol, quantity=qty) else: return None return order
+
+def notify(text): bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=text)
+
+if name == 'main': while True: try: signal, fib = get_signals() if signal: notify(f"Sinyal {signal} terdeteksi untuk {symbol}. Level Fibonacci: {fib}") order = place_order(signal) notify(f"Order {signal} dieksekusi: {order}") else: print("Tidak ada sinyal.") except Exception as e: print("Error:", e) time.sleep(3600)  # Jalan setiap 1 jam
+
